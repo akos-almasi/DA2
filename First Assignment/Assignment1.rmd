@@ -1,0 +1,103 @@
+---
+title: "Analysis of Gender Pay Gap for Web Developers "
+author: "Akos Almasi & Tunay Tokmak"
+output: pdf_document
+---
+
+```{r setup, include=FALSE, }
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+```{r }
+rm(list = ls())
+library(tidyverse)
+library(fixest)
+library(data.table)
+library(modelsummary)
+
+```
+## The Data
+
+The data set consists of web developers. It has 216 observations. A feature is generated as weekly earnings as a division of earnwke and uhours columns. 
+
+```{r }
+
+data <-  read_csv('morg-2014-emp.csv')
+```
+
+```{r }
+web_devs <- data %>% filter(occ2012 == 1030)
+```
+
+```{r }
+web_devs <- web_devs %>% mutate( sex = factor(sex, 
+                                              levels = c(1,2),
+                                              labels = c('M','F')),
+                                 grade92 = factor(grade92,
+                                                    levels= c(39,40,41,42,43,44,45),
+                                                    labels = c('39',
+                                                               '40',
+                                                               '41',
+                                                               '42',
+                                                               '43',
+                                                               '44',  '45')))
+
+web_devs <- web_devs %>% mutate(earning_hour = earnwke/uhours)
+
+``` 
+
+## Unconditional Gender Gap
+
+The chart clearly demonstrates that men earn higher than women on average as web developers.
+The mean for men is 31.39838 USD when it is 26.37298 USD for women.
+
+
+```{r eval= FALSE}
+web_devs %>% group_by(sex) %>% summarise(avg = mean(earning_hour, na.rm = T))
+```
+
+```{r }
+ggplot(web_devs,aes(x= sex, y=earning_hour)) +
+  geom_boxplot() + 
+  stat_summary(fun = mean, geom = "errorbar", aes(ymax = ..y.., ymin = ..y..),
+               width = .75, color = 'red') +
+  labs(title = 'Weekly Earnings per Gender', x = 'sex', y = 'earning/hour ($)') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+## Gender Gap Variance with Educational Level
+
+The graph demonstrates that the average salary for both sexes increase as the educational level of the web developers increases. However, it also demonstrates that the average salary for women is below the average salary of men. So, there is a gender gap.
+
+```{r }
+ggplot(web_devs, aes(x = grade92, y = earning_hour, color = sex)) +
+  geom_line() +
+  stat_summary_bin(fun='mean',
+                   size=2, geom='point')+
+ 
+  labs(title = 'Weekly Earnings per Educational Level',
+       x = 'educational level', y = 'earning ($)') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+## Linear Models
+
+There are two different linear models. The first model takes solely the sex categorical variable into account, while the second model considers both sex and grade92 categorical variables. Thus, we can observe the correlation between educational level and income as well as gender and income.
+
+The R squared values which can be observed in the summary table illustrates that the simple linear regression with only sex variable explains only 3% of the variation while the second model, multiple linear regresion with added grade92 variables, explains 20.8% of the variation in the data. That shows that the educational level is more correlated with the earning/hour than sex categorical variable.
+
+It is seen that the  intercept for the first model is 31.40, while the slope coefficient is -5.03 . The slope coefficient means that if the sex is female, independent variable set to 1, this will decrease the dependent variable weekly earning by -5.03. 
+
+
+The second model's intercept is 23.57, while the slope coefficients for independent sex and grade variables are -1.64,0.92,5.08,9.32,15.68,21.73. respectively.
+
+The slope coefficients demonstrates the effect of each estimator variables' on the weekly earning. Sex can be either 0 or 1 and only one grade variable can be 1 which will increase or decrease the value of dependent variable by the slope coefficient. 
+
+```{r }
+reg_0 <- feols(earning_hour ~ sex, web_devs, vcov = 'hetero')
+reg_1 <- feols(earning_hour ~ sex + grade92, web_devs, vcov = 'hetero')
+
+```
