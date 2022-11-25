@@ -101,3 +101,27 @@ reg_0 <- feols(earning_hour ~ sex, web_devs, vcov = 'hetero')
 reg_1 <- feols(earning_hour ~ sex + grade92, web_devs, vcov = 'hetero')
 
 ```
+
+
+```{r}
+msummary(list(reg_0,reg_1),
+         fmt="%.2f",
+         gof_omit = 'DF|Deviance|Log.Lik.|F|R2 Adj.|AIC|BIC',
+         stars=c('*' = .01), 
+         statistic = "conf.int",
+         conf_level = .99,
+         shape = term ~ model + statistic,
+         title = 'The Coefficient Estimates and Confidence Intervals of Models',
+         output = 'markdown'
+)
+
+```
+
+## Statistical Inference
+
+First model is significant for both intercept and slope coefficient at a p .01. The 99% confidence intervals are [28.03,34.77], [-9.85,-0.20 ] respectively.
+
+
+The second model is significant for intercept, and sex, grade9243,grade9244,grade9245 at a p value .01. The 99% confidence intervals are [16.52,30.62], [-9.33,-0.05], [1.70,16.95], [5.20,26.15], [10.45,	33.01] respectively.
+
+The rest of the variables are not statistically significant. This means the model needs to be improved by adding either more dependent variables or having a different modelling approach.
