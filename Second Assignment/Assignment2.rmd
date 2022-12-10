@@ -57,3 +57,176 @@ sample <- sample(c(TRUE, FALSE), nrow(hotels_barcelona), replace=TRUE, prob=c(0.
 train  <- hotels_barcelona[sample, ]
 test   <- hotels_barcelona[!sample, ]
 ```
+
+
+Let's check the distribution of the dummy variable  for categorical variables. When we check the distribution based on accommodation type, we see that guest house and resort have very few observations. Therefore we omit them.
+
+```{r}
+ggplot()+
+    geom_bar(data = train,aes(x = accommodation_type,fill = as.factor(highly_rated))) +
+    scale_x_discrete(guide = guide_axis(n.dodge=2))+
+    theme_bw()
+```
+
+```{r}
+train <- train %>% filter(accommodation_type != 'Guest House',accommodation_type != 'Resort')
+test <- test %>% filter(accommodation_type != 'Guest House',accommodation_type != 'Resort')
+```
+
+When the distribution based on weekend, holiday and month checked, the ratio of being highly rated does not change on the category. So we are not going to include them in the model.
+```{r}
+ggplot()+
+  geom_bar(data = train %>% filter(highly_rated == 1),aes(x = weekend),
+           fill = 'purple') + 
+  geom_bar(data = train %>% filter(highly_rated == 0),aes(x = weekend),
+           fill = 'red', ) +
+  theme_bw()
+```
+
+```{r}
+ggplot()+
+  geom_bar(data = train %>% filter(highly_rated == 1),aes(x = holiday),
+           fill = 'purple') + 
+  geom_bar(data = train %>% filter(highly_rated == 0),aes(x = holiday),
+           fill = 'red', ) +
+  theme_bw()
+```
+
+```{r}
+ggplot()+
+  geom_bar(data = train %>% filter(highly_rated == 1),aes(x = month),
+           fill = 'purple') + 
+  geom_bar(data = train %>% filter(highly_rated == 0),aes(x = month),
+           fill = 'red', ) +
+  theme_bw()
+```
+
+
+Let's explore the correlation between the dummy variable and some numerical varibles 
+Create the loess function.
+```{r}
+check_loess <- function(x_var, x_lab){
+  ggplot( train , aes(x = x_var, y = highly_rated)) +
+    geom_point(color='red',size=2,alpha=0.6) +
+    geom_smooth(method="loess" , formula = y ~ x , se = FALSE)+
+    labs(x = x_lab, y = "probability of having high rating") +
+    theme_bw() +
+    theme(axis.title.y = element_text(size = 10) ) 
+}
+
+```
+
+The first graph demonstrates the correlation betweeen the distance and the dummy variable
+```{r}
+
+check_loess(train$distance, 'distance')
+```
+
+The correlation does not look linear. Therefore we introduced a polynomial transformation, to capture the relationship better.
+
+```{r}
+train <- train %>% mutate(distance_sqr = distance^2) %>% mutate(distance_cb = distance^3)
+test <- test %>% mutate(distance_sqr = distance^2) %>% mutate(distance_cb= distance^3)
+```
+
+The second graph demonstrates the correlation between the distance_alter and the dummy variable.
+```{r}
+check_loess(train$distance_alter, 'distance_alter')
+```
+
+```{r}
+train <- train %>% mutate(distance_sqr_alter = distance_alter^2) %>% mutate(distance_cb_alter = distance_alter^3)
+test <- test %>% mutate(distance_sqr_alter = distance_alter^2) %>% mutate(distance_cb_alter = distance_alter^3)
+```
+
+The same principle applies to distance_alter variable. It affects the probability. However, we decided not to include it in our model. The reason is that the accuracy ratio for the test data set is higher without the distance_alter variable.
+
+The third graph demonstrates the correlation between the stars and the dummy variable
+
+```{r}
+check_loess(train$stars, 'star')
+```
+The relationship is almost linear.
+The fourth graph demonstrated the correlation between the price and the dummy variable.
+```{r}
+check_loess(train$price_per_night, 'price per night')
+```
+
+```{r}
+train <- train %>% filter(price_per_night < 2000)
+test <- test %>% filter(price_per_night < 2000)
+```
+
+The graph looks like logarithmic which allows us to perform a natural logarith transformation for the price_per_night variable.
+
+```{r}
+train <- train %>% mutate(lnprice = log(price_per_night))
+test <- test %>% mutate(lnprice = log(price_per_night))
+```
+
+
+```{r}
+lpm <-lm(highly_rated ~ distance + distance_sqr + distance_cb +
+           #distance_alter  + distance_alter_sqr +
+           lnprice + 
+           stars , 
+           data=train)
+
+train$pred_lpm <- predict.glm(lpm, type="response")
+
+logit <-glm(highly_rated ~ distance + distance_sqr + distance_cb +
+              #distance_alter + distance_alter_sqr +
+              lnprice + 
+              stars,
+              data=train, family = 'binomial')
+
+logit_marg <- marginaleffects(logit)
+
+train$pred_logit <- predict.glm(logit, type="response")
+
+probit <-glm(highly_rated ~ distance + distance_sqr + distance_cb +
+               #distance_alter + distance_alter_sqr +
+               lnprice + 
+               stars,
+               data=train,
+               family = binomial(link = 'probit'))
+
+probit_marg <- marginaleffects(probit)
+
+train$pred_probit<- predict.glm(probit, type="response") 
+```
+
+
+
+```{r}
+msummary(list( 'lpm' = lpm, 'logit' = logit, 'probit' = probit,'marg_logit' = logit_marg,
+               'marg_probit' = probit_marg),
+         gof_omit = 'DF|Deviance|Log.Lik.|F|R2 Adj.|AIC|BIC|R2|PseudoR2|RMSE',
+         stars=TRUE,
+         estimate = "{estimate}{stars} ", 
+         statistic = "std.error",
+         output = 'markdown'
+        
+)
+```
+
+When we check the models, we see that all intercepts and coefficients are statistically significant with a p value nearly 0. Distance is expressed as a polynomial. Therefore, one unit increase in distance will increase or decrease the probability of having a high rating based on the total of coefficients. However, we can say that the trend is as distance increases the probability decreases which is sensible. For price variable we see that the coefficients are around 0.11 for models. That means 10 percent increase in the price will increase the probability around 0.011 percent. Lastly stars coefficients are around 0.16 for the models. This leads to the conclusion that the stars variable is the most determining variable in the model. It makes sense that we already observed the sharp linear relationship previously. 1 unit increase in the stars will increase the probability of having high rating by 0.16 percent. The small effect of the price may be explained by the relationship of stars and price. However, we decided to keep it since it does not affect the prediction significantly.
+```{r}
+
+test$pred_logit <- predict.glm(logit,newdata = test,  type="response")
+test$pred_probit<- predict.glm(probit, newdata = test, type="response") 
+test$pred_lpm <- predict.glm(lpm,newdata = test,  type="response")
+
+test$logit_prediction <- ifelse(test$pred_logit < 0.5, 0, 1)
+test$probit_prediction <- ifelse(test$pred_probit < 0.5, 0, 1)
+test$lpm_prediction <- ifelse(test$pred_lpm < 0.5, 0, 1)
+
+mean(test$highly_rated == test$logit_prediction)
+mean(test$highly_rated == test$probit_prediction)
+mean(test$highly_rated == test$lpm_prediction)
+
+
+
+```
+
+To evaluate the success of the models, we compare the accuracy scores based on predicted probabilities. All models perform ~72 percent correctly. Therefore, there is not a significant difference between the models.
